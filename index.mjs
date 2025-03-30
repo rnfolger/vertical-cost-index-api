@@ -33,6 +33,37 @@ app.get('/api/latest', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch data' });
   }
 });
+app.get('/api/series', async (req, res) => {
+  try {
+    const start = '2006-01-01';
+    const today = new Date().toISOString().split('T')[0];
+
+    const ppiURL = `https://api.stlouisfed.org/fred/series/observations?series_id=WPUSI012011&api_key=${API_KEY}&file_type=json&observation_start=${start}&observation_end=${today}`;
+    const wageURL = `https://api.stlouisfed.org/fred/series/observations?series_id=CES2000000003&api_key=${API_KEY}&file_type=json&observation_start=${start}&observation_end=${today}`;
+
+    const [ppiRes, wageRes] = await Promise.all([fetch(ppiURL), fetch(wageURL)]);
+    const ppiData = await ppiRes.json();
+    const wageData = await wageRes.json();
+
+    const wageMap = new Map(
+      wageData.observations.map(o => [o.date.slice(0, 7), parseFloat(o.value)])
+    );
+
+    const output = ppiData.observations
+      .filter(o => wageMap.has(o.date.slice(0, 7)))
+      .map(o => ({
+        date: o.date.slice(0, 7),
+        ppi: parseFloat(o.value),
+        wage: wageMap.get(o.date.slice(0, 7))
+      }))
+      .filter(entry => !isNaN(entry.ppi) && !isNaN(entry.wage));
+
+    res.json(output);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch historical data' });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
